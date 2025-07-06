@@ -1,0 +1,65 @@
+version: '3.9'
+services:
+  backend:
+    build: ./backend
+    volumes:
+      - ./backend/app:/app
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  worker:
+    build: ./backend
+    volumes:
+      - ./backend/app:/app
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    command: celery -A app.celery_app worker --loglevel=info
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+
+  db:
+    image: postgres:14
+    environment:
+      - POSTGRES_DB=blackglass
+      - POSTGRES_USER=blackglass
+      - POSTGRES_PASSWORD=blackglass
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:6
+    volumes:
+      - redis-data:/data
+
+  nginx:
+    image: nginx:latest
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+      - cert-data:/etc/letsencrypt
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - frontend
+      - backend
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - cert-data:/etc/letsencrypt
+    entrypoint: /bin/sh -c 'trap exit TERM; while :; do sleep 12h & wait $${!}; certbot renew; done'
+
+volumes:
+  db-data:
+  redis-data:
+  cert-data:
